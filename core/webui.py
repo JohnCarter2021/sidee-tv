@@ -376,6 +376,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 u, self.headers.get("Range"), ACCESS_KEY)
             self._bytes(body, ctype, code,
                         {"Content-Range": crange} if crange else None)
+        elif path == "/tv/diag":
+            self._bytes(tv_frontend.diag_page(ACCESS_KEY).encode("utf-8"),
+                        "text/html; charset=utf-8")
+        elif path == "/tv/hls.js":
+            # A failed library fetch must fail as a script (so the player
+            # page's CDN fallback runs), never as a 200 with an error page.
+            try:
+                code, ctype, body = tv_frontend.hls_response()
+            except Exception:
+                code, ctype, body = 502, "text/html; charset=utf-8", b""
+            self._bytes(body, ctype, code)
         else:
             self._json({"error": "not found"}, 404)
 

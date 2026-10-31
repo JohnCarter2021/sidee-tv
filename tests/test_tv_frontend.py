@@ -250,7 +250,7 @@ class TestStreamResponse(unittest.TestCase):
 class TestPlayerPage(unittest.TestCase):
     def test_hint_survives_manifest_and_fatal_errors_retry(self):
         html = tv_frontend.player_page(
-            "Show", 3, "/tv/stream?u=x&key=k", "/tv/page?u=y&key=k")
+            "Show", 3, "/tv/stream?u=x&key=k", "/tv/page?u=y&key=k", "k")
         # The hint must NOT hide on manifest parse: autoplay blocks and
         # manifest failures otherwise leave a black screen with no hint.
         self.assertIn(
@@ -264,6 +264,39 @@ class TestPlayerPage(unittest.TestCase):
         self.assertIn("Hls.Events.ERROR", html)
         self.assertIn("Stream failed to load. Press OK to try again.", html)
         self.assertIn("window.location.reload()", html)
+        # Library from the phone first, CDN only as a fallback.
+        self.assertIn("/tv/hls.js?key=k", html)
+        self.assertIn("cdn.jsdelivr.net/npm/hls.js@1", html)
+
+
+class TestDiagAndHls(unittest.TestCase):
+    def test_diag_page_rows_and_es5_script(self):
+        html = tv_frontend.diag_page("k")
+        for row in ("row-js", "row-ua", "row-hls", "row-mse", "row-native",
+                    "row-mp4", "row-menu", "row-hlsphone", "row-cdn",
+                    "row-key"):
+            self.assertIn(row, html)
+        self.assertIn("/tv/diag", tv_frontend.menu_page("k"))
+        self.assertIn("Check this TV", tv_frontend.menu_page("k"))
+        # Old TV browsers: no arrow functions, no fetch API.
+        self.assertNotIn("=>", html)
+        self.assertNotIn("fetch(", html)
+        self.assertIn("XMLHttpRequest", html)
+
+    def test_hls_response_caches_and_fails_cleanly(self):
+        tv_frontend._hls_cache = None
+        with patch.object(tv_frontend, "_request",
+                          return_value=(200, {}, b"var Hls={};")) as get:
+            code, ctype, body = tv_frontend.hls_response()
+            self.assertEqual((code, ctype, body),
+                             (200, "application/javascript", b"var Hls={};"))
+            tv_frontend.hls_response()
+            get.assert_called_once()
+        tv_frontend._hls_cache = None
+        with patch.object(tv_frontend, "_request",
+                          side_effect=OSError("down")):
+            with self.assertRaises(tv_frontend.TvError):
+                tv_frontend.hls_response()
 
 
 if __name__ == "__main__":

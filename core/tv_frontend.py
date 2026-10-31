@@ -448,12 +448,112 @@ def menu_page(key: str) -> str:
     links = "".join(
         f"<a class='tv-tile' href='{tv_url('/tv/page', {'u': u}, key)}'>"
         f"{html_lib.escape(name)}</a>" for name, u in tiles)
+    links += (f"<a class='tv-tile' href='{tv_url('/tv/diag', {}, key)}'>"
+              "Check this TV (video test)</a>")
     return ("<!doctype html><html><head><meta charset='utf-8'>"
             "<title>Sidee TV</title>" + NAV_CSS + "</head><body>"
             "<h1 style='font-size:36px;margin:24px;'>Sidee TV</h1>"
             "<p class='tv-hint'>Arrows move, OK opens, Back returns. "
             "Prototype: AnimeX browsing and playback only.</p>"
             + links + NAV_JS + "</body></html>")
+
+
+HLS_CDN = "https://cdn.jsdelivr.net/npm/hls.js@1"
+_hls_cache: bytes | None = None
+
+
+def hls_response() -> tuple[int, str, bytes]:
+    """GET /tv/hls.js handler result: the player library, via the phone.
+
+    The TV browser loads hls.js from here instead of the CDN, so playback
+    no longer depends on the TV reaching jsdelivr directly. The file is
+    fetched once per dashboard process and cached in memory; the player
+    page still falls back to the CDN if this fetch fails.
+    """
+    global _hls_cache
+    if _hls_cache is None:
+        # One short attempt, not the usual 3x retry: a hanging library
+        # fetch would block the TV's parser (the fallback script tag
+        # only runs after this one resolves), so fail fast to the CDN.
+        try:
+            status, _headers, body = _request(HLS_CDN, {}, timeout=15)
+        except (OSError, http.client.HTTPException):
+            raise TvError("The player library could not be fetched.")
+        if status != 200 or not body:
+            raise TvError("The player library could not be fetched.")
+        _hls_cache = body
+    return 200, "application/javascript", _hls_cache
+
+
+def diag_page(key: str) -> str:
+    """TV playback checkup: capability rows the TV browser fills in.
+
+    Every row starts as "Checking..." and is replaced by script, so a row
+    that stays on "Checking..." already says JavaScript is not running.
+    The script is deliberately ES5 (var, function, XMLHttpRequest) for old
+    TV browsers. Open it from the menu's "Check this TV" tile and read
+    (or photograph) the rows: they pinpoint whether the failure is the
+    library, MSE support, native playback, network reachability, or the
+    remote's own key codes.
+    """
+    def row(rid: str, label: str) -> str:
+        return (f"<div class='tv-tile'>{html_lib.escape(label)}: "
+                f"<span id='{rid}'>Checking...</span></div>")
+
+    menu_url = tv_url("/tv/", {}, key)
+    hls_url = tv_url("/tv/hls.js", {}, key)
+    script = (
+        "<script>(function(){"
+        "function set(id,text){var el=document.getElementById(id);"
+        "if(el)el.textContent=text;}"
+        "set('row-js','Yes');"
+        "try{set('row-ua',navigator.userAgent);}"
+        "catch(e){set('row-ua','Unknown');}"
+        "if(window.Hls){set('row-hls','Loaded');"
+        "try{set('row-mse',Hls.isSupported()?'Yes':'No');}"
+        "catch(e){set('row-mse','Error');}}"
+        "else{set('row-hls','NOT loaded');"
+        "set('row-mse','Unknown (no library)');}"
+        "var v=document.createElement('video');"
+        "set('row-native',"
+        "v.canPlayType('application/vnd.apple.mpegurl')||'No');"
+        "set('row-mp4',v.canPlayType('video/mp4')||'No');"
+        "function check(id,url,method){var x;"
+        "try{x=new XMLHttpRequest();}catch(e){set(id,'Cannot test');return;}"
+        "x.timeout=10000;"
+        "x.onreadystatechange=function(){if(x.readyState===4){"
+        "if(x.status===200){set(id,'OK ('+x.status+')');}"
+        "else{set(id,'Failed (status '+x.status+')');}}};"
+        "x.ontimeout=function(){set(id,'Timed out');};"
+        "x.onerror=function(){set(id,'Failed to reach');};"
+        "try{x.open(method,url,true);x.send();}"
+        "catch(e){set(id,'Failed to reach');}}"
+        "check('row-menu'," + json.dumps(menu_url) + ",'GET');"
+        "check('row-hlsphone'," + json.dumps(hls_url) + ",'GET');"
+        "check('row-cdn','" + HLS_CDN + "','HEAD');"
+        "document.addEventListener('keydown',function(e){"
+        "set('row-key','Last key: '+(e.key||'?')+' (code '+e.keyCode+')');});"
+        "})();</script>")
+    rows = "".join([
+        row("row-js", "JavaScript running"),
+        row("row-ua", "Browser"),
+        row("row-hls", "Player library (hls.js)"),
+        row("row-mse", "Stream engine (MSE) supported"),
+        row("row-native", "Built-in HLS playback"),
+        row("row-mp4", "Built-in MP4 playback"),
+        row("row-menu", "Reach this dashboard"),
+        row("row-hlsphone", "Reach player library via phone"),
+        row("row-cdn", "Reach player library CDN directly"),
+        row("row-key", "Remote key (press OK, arrows, Back)"),
+    ])
+    return ("<!doctype html><html><head><meta charset='utf-8'>"
+            "<title>TV playback checkup</title>" + NAV_CSS + "</head><body>"
+            "<h1 style='font-size:36px;margin:24px;'>TV playback checkup</h1>"
+            "<p class='tv-hint'>If video won't play, read these rows out "
+            "or photograph them: they show exactly which link breaks.</p>"
+            + rows +
+            f"<a class='tv-tile' href='{menu_url}'>Back to Sidee TV menu</a>"
+            + NAV_JS + script + "</body></html>")
 
 
 def page_response(u: str, key: str) -> tuple[int, str, bytes]:
@@ -484,17 +584,22 @@ def play_response(watch_url: str, key: str) -> tuple[int, str, bytes]:
         title_slug = re.sub(r"-episode-\d+$", "", last)
         back = tv_url("/tv/page", {"u": SITE + "/anime/" + title_slug}, key)
         stream_url = tv_url("/tv/stream", {"u": stream}, key)
-        body = player_page(title, ep, stream_url, back)
+        body = player_page(title, ep, stream_url, back, key)
         return 200, "text/html; charset=utf-8", body.encode("utf-8")
     except TvError as e:
         return 502, "text/html; charset=utf-8", \
             error_page(str(e), key).encode("utf-8")
 
 
-def player_page(title: str, ep: int, stream_url: str, back_url: str) -> str:
+def player_page(title: str, ep: int, stream_url: str, back_url: str,
+                key: str) -> str:
     return ("<!doctype html><html><head><meta charset='utf-8'>"
             "<title>" + html_lib.escape(title) + "</title>"
-            "<script src='https://cdn.jsdelivr.net/npm/hls.js@1'></script>"
+            # Library from the phone first (the TV need not reach the CDN);
+            # if that load fails, fall back to the CDN before init runs.
+            "<script src='" + tv_url("/tv/hls.js", {}, key) + "'></script>"
+            "<script>if(!window.Hls){document.write('<script src="
+            "\"https://cdn.jsdelivr.net/npm/hls.js@1\"><\\/script>');}</script>"
             "<style>body{background:#000;color:#fff;font-family:sans-serif;"
             "margin:0}video{width:100vw;height:100vh;background:#000}"
             "#msg{position:fixed;top:20px;left:20px;font-size:24px;"
