@@ -1,0 +1,6 @@
+/app/src/main/python/core/
+/app/src/main/python/assets/
+build/
+.gradle/
+local.properties
+*.iml
