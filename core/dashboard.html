@@ -1,0 +1,981 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f5f3">
+  <title>Sidee — Your TV, your apps</title>
+  <link rel="icon" href="/assets/sidee-logo.png">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f5f3; --surface: #fff; --ink: #20211f; --muted: #696b65;
+      --line: #e5e6e0; --accent: #ffe600; --accent-ink: #655b00;
+      --positive: #28613c; --negative: #ac3232;
+      --radius: 24px; --ease: cubic-bezier(.22, 1, .36, 1);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-synthesis: none; font-optical-sizing: auto;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); line-height: 1.5; }
+    button, input, select { font: inherit; }
+    button, a, input, select, summary { -webkit-tap-highlight-color: transparent; }
+    button, a { touch-action: manipulation; }
+    button { cursor: pointer; }
+    img { display: block; max-width: 100%; }
+    a { color: inherit; text-underline-offset: 4px; }
+    h1, h2, h3, p { margin: 0; }
+    button:focus-visible, a:focus-visible, summary:focus-visible {
+      outline: 3px solid var(--accent-ink); outline-offset: 4px;
+    }
+    [hidden] { display: none !important; }
+    .icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+    .shell { width: min(1120px, 100% - 2 * clamp(16px, 4vw, 40px)); margin-inline: auto; }
+    .top { background: rgba(250,250,248,.86); border-bottom: 1px solid rgba(220,221,215,.7); backdrop-filter: blur(24px) saturate(140%); }
+    .top-inner { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 82px; padding-block: 14px; }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .logo { width: 46px; height: 46px; border-radius: 13px; }
+    .brand-name { font-size: 17px; font-weight: 650; letter-spacing: -.035em; }
+    .brand-by { color: var(--muted); font-size: 12px; letter-spacing: .025em; }
+    .status { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: rgba(255,255,255,.8); padding: 8px 12px; border-radius: 100px; font-size: 12px; color: var(--muted); min-width: 0; max-width: 50%; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #91938b; flex-shrink: 0; }
+    .status.on { color: var(--positive); background: #f2f8f1; border-color: #d8e6d8; }
+    .status.on .status-dot { background: var(--positive); }
+    #tvchip { overflow-wrap: anywhere; }
+    main { padding-top: clamp(32px, 5vw, 58px); padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
+    .intro { display: grid; gap: 24px; margin-bottom: 32px; }
+    .eyebrow { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .13em; text-transform: uppercase; margin-bottom: 12px; }
+    .eyebrow::before { content: ""; width: 18px; height: 4px; background: var(--accent); border-radius: 2px; }
+    h1 { font-size: clamp(32px, 1.65rem + 2.2vw, 52px); font-weight: 620; line-height: 1.09; letter-spacing: -.055em; }
+    .intro-copy { color: var(--muted); margin-top: 14px; max-width: 48ch; font-size: 16px; line-height: 1.6; }
+    .privacy { display: flex; align-items: center; gap: 12px; align-self: end; }
+    .privacy > .icon { width: 36px; height: 36px; padding: 8px; border-radius: 12px; background: #eaece4; color: #65695b; }
+    .privacy b { display: block; font-size: 12px; font-weight: 600; }
+    .privacy span { display: block; font-size: 12px; color: var(--muted); }
+    /* The QR sits beside its instructions when space allows, and wraps below on phones. */
+    .phone-access { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; margin-bottom: 24px; padding: clamp(20px, 3vw, 28px); }
+    .phone-copy { flex: 1 1 18rem; min-width: 0; }
+    .phone-copy p { color: var(--muted); font-size: 1rem; line-height: 1.55; max-width: 54ch; margin-top: 10px; }
+    .phone-copy .phone-note { font-size: 13px; }
+    .phone-url { display: block; min-height: 44px; color: var(--accent-ink); overflow-wrap: anywhere; font-size: 13px; line-height: 1.55; margin-top: 12px; padding-block: 8px; }
+    .phone-visual { margin-inline: auto; max-width: 100%; }
+    .phone-qr { display: block; width: 192px; height: 192px; max-width: 100%; background: #fff; }
+    .phone-message { color: var(--muted); font-size: 13px; line-height: 1.5; max-width: 26ch; }
+    .panel { background: var(--surface); border: 1px solid rgba(223,224,218,.85); border-radius: var(--radius); box-shadow: 0 8px 32px -18px rgba(37,39,25,.16), inset 0 1px 0 #fff; }
+    .setup { padding: clamp(20px, 3vw, 28px); }
+    .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    h2 { font-size: 18px; font-weight: 650; letter-spacing: -.035em; }
+    .section-meta { font-size: 12px; color: var(--muted); }
+    .badge { display: inline-flex; align-items: center; gap: 6px; color: var(--positive); background: #eef6ed; padding: 4px 10px; border-radius: 100px; font-size: 12px; }
+    .badge .icon { width: 14px; height: 14px; }
+    /* On phones, setup reads top to bottom. Three columns begin only when each step has room. */
+    .steps { display: grid; gap: 22px; margin-top: 24px; }
+    .step { min-width: 0; }
+    .step-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+    .step-number { display: grid; place-items: center; width: 25px; height: 25px; border-radius: 50%; font-size: 12px; font-weight: 650; background: #f0f1ec; color: var(--muted); flex-shrink: 0; }
+    .step.current .step-number { background: var(--accent); color: var(--ink); }
+    .step.complete .step-number { background: #eaf3e8; color: var(--positive); }
+    h3 { font-size: 14px; font-weight: 600; letter-spacing: -.015em; }
+    .step p { color: var(--muted); font-size: 13px; min-height: 40px; line-height: 1.55; overflow-wrap: anywhere; }
+    .step + .step { border-top: 1px solid var(--line); padding-top: 20px; }
+    .step-actions { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    .button { min-height: 44px; border: 1px solid transparent; border-radius: 13px; padding: 10px 16px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: var(--accent); color: var(--ink); transition: transform 180ms var(--ease), background 180ms, opacity 180ms; }
+    .button .icon { width: 16px; height: 16px; }
+    .button.secondary { background: #f1f2ec; border-color: #e9eae4; }
+    .button:active:not(:disabled) { transform: scale(.97); }
+    .button:disabled { color: #787b71; background: #ebede5; border-color: transparent; cursor: not-allowed; }
+    .button[aria-busy="true"] { opacity: .75; }
+    .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    label { font-size: 11px; font-weight: 600; color: var(--muted); }
+    input, select { min-height: 44px; width: 100%; min-width: 0; border: 1px solid #d9dcd2; border-radius: 12px; padding: 10px 12px; background: #fafbf7; color: var(--ink); font-size: 16px; outline: none; transition: border-color 150ms, box-shadow 150ms; }
+    input:focus, select:focus { border-color: var(--accent-ink); box-shadow: 0 0 0 3px rgba(190,176,32,.14); }
+    input[aria-invalid="true"] { border-color: var(--negative); }
+    input::placeholder { color: #8b8e82; opacity: 1; }
+    input:disabled { opacity: .6; }
+    #pin { width: 100%; max-width: 112px; font-variant-numeric: tabular-nums; text-align: center; letter-spacing: .18em; }
+    .pin-field { flex: 0 1 112px; }
+    .device-field { margin-top: 12px; }
+    .manual-tv { margin-top: 12px; background: transparent; }
+    .manual-tv summary { padding: 10px; min-height: 36px; color: var(--muted); }
+    .manual-tv-body { display: grid; gap: 10px; padding: 4px 10px 12px; }
+    .manual-tv .button { width: 100%; }
+    .field-error { color: var(--negative); font-size: 12px; margin-top: 8px; }
+    .ready-note { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-top: 14px; color: var(--muted); font-size: 12px; }
+    .ready-note .icon { width: 17px; height: 17px; }
+    body.is-linked .ready-note { color: var(--positive); }
+    .catalog { margin-top: 32px; }
+    .catalog .section-head { margin-bottom: 16px; }
+    /* The featured app spans the wider column on desktop; every card gets full width on phones. */
+    .app-grid { display: grid; gap: 18px; }
+    .app { min-width: 0; overflow: clip; display: flex; flex-direction: column; }
+    .featured { background: #1c1e1a; color: #fafbf7; border-color: #30322a; box-shadow: 0 12px 32px -18px rgba(21,24,12,.3); }
+    .featured-art { position: relative; min-height: 186px; display: grid; place-items: center; padding: 34px 24px 30px; background: radial-gradient(ellipse at 72% 12%, rgba(255,230,0,.09), transparent 65%); }
+    .featured-label { position: absolute; left: 24px; top: 20px; color: #b4b7a9; display: flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+    .featured-label .icon { width: 12px; height: 12px; color: var(--accent); }
+    .tv-preview { width: min(286px, 80%); aspect-ratio: 2.2; position: relative; padding: 24px 30px; border: 1px solid #555849; border-radius: 13px; background: #141611; display: flex; align-items: center; justify-content: center; box-shadow: 0 12px 24px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.08); }
+    .tv-preview::after { content: ""; position: absolute; bottom: -8px; width: 30%; height: 5px; border-radius: 0 0 5px 5px; background: #575b4d; }
+    .tv-preview img { width: 205px; height: auto; max-height: 76px; object-fit: contain; }
+    .app-body { padding: 24px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+    .featured .app-body { padding-top: 16px; }
+    .app-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .app h3 { font-size: 24px; font-weight: 600; letter-spacing: -.045em; }
+    .app-pill { border: 1px solid #484c3d; border-radius: 100px; padding: 4px 9px; font-size: 10px; color: #c6c9ba; white-space: nowrap; }
+    .app-description { font-size: 14px; line-height: 1.65; color: var(--muted); max-width: 48ch; }
+    .featured .app-description { color: #babdae; }
+    .app-bottom { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: auto; padding-top: 8px; }
+    .app-note { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+    .app-note .icon { width: 14px; height: 14px; }
+    .featured .app-note { color: #b0b4a5; }
+    .featured .button:disabled { background: #33372b; color: #c5c9bb; }
+    .jellyfin-head, .stremio-head { display: flex; align-items: center; gap: 12px; }
+    .app-icon { width: 50px; height: 50px; border-radius: 14px; }
+    .jellyfin-head small, .stremio-head small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .jellyfin .app-body, .stremio .app-body { gap: 18px; }
+    .jellyfin .field, .stremio .field { margin-top: auto; }
+    .jellyfin .button, .stremio .button { width: 100%; }
+    .help-text { font-size: 11px; color: var(--muted); }
+    .install-hint { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+    .install-hint .icon { width: 14px; height: 14px; }
+    #banner { margin-bottom: 22px; padding: 16px 20px; border-radius: 16px; border: 1px solid #d5e3d2; background: #edf5e9; color: var(--positive); display: flex; align-items: start; gap: 12px; font-size: 13px; }
+    #banner > .icon { margin-top: 2px; }
+    #banner b { display: block; font-weight: 650; margin-bottom: 2px; }
+    .utilities { margin-top: 24px; display: grid; gap: 12px; }
+    details { border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.45); }
+    summary { list-style: none; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 14px 18px; cursor: pointer; font-size: 13px; font-weight: 550; }
+    summary::-webkit-details-marker { display: none; }
+    summary > .icon { width: 17px; height: 17px; color: var(--muted); }
+    summary .chevron { margin-left: auto; transition: transform 180ms var(--ease); }
+    details[open] .chevron { transform: rotate(180deg); }
+    .help-content { padding: 0 18px 18px; font-size: 13px; color: var(--muted); }
+    .help-content p + p { margin-top: 12px; }
+    .help-content b { display: block; color: var(--ink); font-weight: 600; margin-bottom: 2px; }
+    .activity-count { margin-left: auto; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+    summary .activity-count + .chevron { margin-left: 0; }
+    #log { margin: 0 12px 12px; border-radius: 10px; background: #f0f1eb; padding: 12px; max-height: 190px; min-height: 44px; overflow: auto; font-family: ui-monospace, "Cascadia Code", monospace; font-size: 11px; line-height: 1.8; overflow-wrap: anywhere; }
+    .log-line { display: block; white-space: pre-wrap; }
+    .ok { color: var(--positive); } .err { color: var(--negative); }
+    #notice { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: #f2f3ed; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+    #notice.err { color: var(--negative); background: #fdf0ed; }
+    #notice.ok { color: var(--positive); background: #eef5eb; }
+    footer { margin-top: 32px; padding-top: 22px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+    .footer-brand { font-weight: 650; color: var(--ink); margin-bottom: 3px; }
+    .coffee { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); z-index: 60; display: inline-flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 14px 8px 9px; border: 1px solid rgba(255,255,255,.12); border-radius: 16px; background: var(--ink); color: #fff; box-shadow: 0 16px 38px -14px rgba(32,33,31,.42); text-decoration: none; transition: transform 180ms var(--ease), background 180ms, box-shadow 180ms; }
+    .coffee-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: var(--accent); color: var(--ink); flex-shrink: 0; }
+    .coffee-mark .icon { width: 17px; height: 17px; }
+    .coffee-copy { display: flex; flex-direction: column; gap: 2px; line-height: 1.05; }
+    .coffee-copy strong { font-size: 13px; font-weight: 680; letter-spacing: -.015em; }
+    .coffee-copy small { color: #c9cbc4; font-size: 10px; font-weight: 500; }
+    @media (min-width: 760px) {
+      .intro { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+      .privacy { margin-bottom: 4px; }
+      .steps { grid-template-columns: 1fr 1.2fr .9fr; gap: 24px; }
+      .step + .step { border-top: 0; border-left: 1px solid var(--line); padding-top: 0; padding-left: 24px; }
+      .app-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .featured { grid-column: 1 / -1; }
+      .utilities { grid-template-columns: 1fr 1fr; align-items: start; }
+    }
+    @media (max-width: 520px) {
+      .coffee { right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); min-height: 50px; padding: 8px 12px 8px 8px; border-radius: 15px; }
+      .coffee-mark { width: 32px; height: 32px; border-radius: 10px; }
+      .coffee-copy small { display: none; }
+    }
+    @media (hover: hover) {
+      .button:hover:not(:disabled) { background: #f0da09; transform: translateY(-1px); }
+      .button.secondary:hover:not(:disabled) { background: #e7eadf; }
+      .coffee:hover { background: #2c2e2a; transform: translateY(-2px); box-shadow: 0 18px 42px -13px rgba(32,33,31,.5); }
+      summary:hover { color: var(--accent-ink); }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      main { animation: arrive 450ms var(--ease) both; }
+      @keyframes arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+    @media (prefers-reduced-transparency: reduce) { .top { background: #fafaf8; backdrop-filter: none; } }
+    @media (prefers-contrast: more) { :root { --muted: #46483f; --line: #969a89; } .panel, .status, details { border-color: #969a89; } .top { background: #fafaf8; } }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute"><defs>
+    <symbol id="i-tv" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="3"/><path d="M8 21h8m-4-4v4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6z"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 16v4h16v-4"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 8.5a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 16h.01"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+    <symbol id="i-coffee" viewBox="0 0 24 24"><path d="M5 8h12v7a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5zm12 1h2a3 3 0 0 1 0 6h-2M8 3v2m4-2v2"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-2.9-5.5 2.9 1-6.2L3 9.6l6.2-.9z"/></symbol>
+  </defs></svg>
+  <header class="top">
+    <div class="shell top-inner">
+      <div class="brand">
+        <img class="logo" src="/assets/sidee-logo.png" alt="Sidee" width="46" height="46">
+        <div><div class="brand-name">Sidee</div><div class="brand-by">For VIDAA TVs</div></div>
+      </div>
+      <div class="status" id="statusChip"><span class="status-dot"></span><span id="tvchip" role="status">Checking your TV…</span></div>
+    </div>
+  </header>
+  <main class="shell">
+    <section class="intro" aria-labelledby="pageTitle">
+      <div>
+        <p class="eyebrow">A little more home</p>
+        <h1 id="pageTitle">Your TV.<br>Your apps. Your way.</h1>
+        <p class="intro-copy">Bring your favorite apps to the big screen.<br>Connect once. Make yourself at home.</p>
+      </div>
+      <div class="privacy"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg><div><b>At home, on your network.</b><span>No account. No cloud. Just your TV.</span></div></div>
+    </section>
+    <section class="panel phone-access" aria-labelledby="phoneTitle">
+      <div class="phone-copy">
+        <h2 id="phoneTitle">Use your phone</h2>
+        <p>TV far from your computer? Scan this QR with your phone's camera and enter the TV PIN while standing beside your TV.</p>
+        <p class="phone-note">Use the same home network on your phone, TV and computer. Keep Sidee running on the computer.</p>
+        <a id="phoneLink" class="phone-url" target="_blank" rel="noopener" hidden></a>
+      </div>
+      <div class="phone-visual">
+        <img id="phoneQr" class="phone-qr" width="192" height="192" alt="Scan to open this dashboard on your phone" hidden>
+        <p id="phoneMessage" class="phone-message" role="status">Preparing your QR code…</p>
+      </div>
+    </section>
+    <div id="banner" role="status" hidden><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><div><b id="bannerTitle">Make yourself at home.</b><span id="bannerText">Your app is in the TV launcher. Select its tile to open it.</span></div></div>
+    <section class="panel setup" id="setup" aria-labelledby="setupTitle">
+      <div class="section-head"><h2 id="setupTitle">A quick introduction to your TV.</h2><span class="section-meta" id="setupMeta">Three steps. Then you're home.</span><span class="badge" id="pairbadge" hidden><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Paired</span><button class="button secondary" id="btnForget" hidden><span>Forget this TV</span></button></div>
+      <div class="steps">
+        <div class="step current" id="stepFind">
+          <div class="step-heading"><span class="step-number">1</span><h3>Find your TV</h3></div>
+          <p id="tvname">Turn on your TV and connect it to the same network as this device.</p>
+          <div class="field device-field" id="deviceField" hidden><label for="tvselect">Choose your TV</label><select id="tvselect"></select></div>
+          <div class="step-actions"><button class="button secondary" id="btnFind"><svg class="icon" aria-hidden="true"><use href="#i-tv"/></svg><span>Find TV</span></button></div>
+          <details class="manual-tv">
+            <summary>TV not found? Check its IP address</summary>
+            <div class="manual-tv-body">
+              <div class="field"><label for="manualIp">TV's local IPv4 address</label><input id="manualIp" type="text" inputmode="decimal" spellcheck="false" maxlength="15" placeholder="192.168.1.50" aria-describedby="manualHelp manualError"><span class="help-text" id="manualHelp">Use the address from the TV's network settings. Sidee checks its VIDAA identity and connection port before pairing.</span></div>
+              <button class="button secondary" id="btnFindIp"><span>Check TV IP</span></button>
+              <div class="field-error" id="manualError" role="alert" hidden></div>
+            </div>
+          </details>
+        </div>
+        <div class="step" id="stepPair">
+          <div class="step-heading"><span class="step-number">2</span><h3>Make the connection</h3></div>
+          <p id="pinHelp">Find your TV, then click Request code to display a PIN on its screen.</p>
+          <div class="step-actions"><button class="button secondary" id="btnRequest" disabled><span>Request code</span><svg class="icon" aria-hidden="true"><use href="#i-tv"/></svg></button></div>
+          <div class="step-actions"><div class="field pin-field"><label for="pin">TV PIN</label><input id="pin" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{4}" maxlength="4" placeholder="0000" aria-describedby="pinHelp pinError" disabled></div><button class="button secondary" id="btnPair" disabled><span>Confirm code</span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div>
+          <div class="field-error" id="pinError" hidden></div>
+        </div>
+        <div class="step" id="stepInstall">
+          <div class="step-heading"><span class="step-number">3</span><h3>Choose what you love</h3></div>
+          <p>Once paired, choose apps from the grid below. Stremio uses a TV-first interface with D-pad navigation and can also be linked to your streaming server. Then open the app from Home on your TV.</p>
+          <div class="ready-note"><svg class="icon" id="readyIcon" aria-hidden="true"><use href="#i-lock"/></svg><span id="readyText">Pair your TV to unlock installation</span></div>
+        </div>
+      </div>
+      <div id="notice" role="status" hidden></div>
+    </section>
+    <section class="catalog" aria-labelledby="catalogTitle">
+      <div class="section-head"><h2 id="catalogTitle">Meet your next favorite.</h2><span class="section-meta">Apps for your VIDAA TV</span></div>
+      <div class="field"><label for="appSearch">Search apps</label><input id="appSearch" type="search" placeholder="Search by name or description" spellcheck="false"></div>
+      <div id="appFilters" role="group" aria-label="Filter apps by category"></div>
+      <div class="app-grid" id="appGrid"></div>
+      <p class="install-hint" id="installHint">Connect your TV above to start installing.</p>
+      <p id="gridState" role="status"></p>
+      <div class="field"><button class="button secondary" id="btnRefreshCatalog"><span>Refresh installed state</span></button> <button class="button secondary" id="btnDiagnostics"><span>Check my setup</span></button></div>
+      <div id="diagResults" role="status"></div>
+      <details id="customApp"><summary>Add a custom app</summary><div>
+        <div class="field"><label for="customAppId">App ID</label><input id="customAppId" type="text" spellcheck="false" placeholder="myapp" maxlength="32"></div>
+        <div class="field"><label for="customName">Name</label><input id="customName" type="text" spellcheck="false" placeholder="My App" maxlength="40"></div>
+        <div class="field"><label for="customUrl">App URL</label><input id="customUrl" type="text" inputmode="url" spellcheck="false" placeholder="https://…"></div>
+        <div class="field"><label for="customImage">Icon URL · optional</label><input id="customImage" type="text" inputmode="url" spellcheck="false" placeholder="https://…"></div>
+        <div class="field"><label for="customDescription">Description · optional</label><input id="customDescription" type="text" spellcheck="false" maxlength="200"></div>
+        <div class="field"><label for="customCategory">Category</label><select id="customCategory"><option>Media</option><option>Music</option><option>Tools</option><option selected>Custom</option></select></div>
+        <button class="button secondary" id="btnAddCustom"><span>Add custom app</span></button>
+        <div class="field-error" id="customError" role="alert" hidden></div>
+      </div></details>
+    </section>
+    <div class="utilities">
+      <details><summary><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg>A little help<svg class="icon chevron" aria-hidden="true"><use href="#i-chevron"/></svg></summary><div class="help-content">
+        <p><b>First time connecting?</b>Click Find TV, then Request code. Enter the 4-digit PIN displayed on your TV in the TV PIN field above and click Confirm code. Installation becomes available as soon as the TV confirms the connection.</p>
+        <p><b>How do I open the installer again?</b>On Windows, double-click <code>start-windows.bat</code> in the extracted folder. The first launch prepares the app automatically and needs an Internet connection. On macOS, open <code>Sidee.app</code> in Applications; Python is already included. Keep Sidee's window open while using this page. If the browser does not open, use “Open dashboard” on macOS or the complete link printed beside “this computer” on Windows, including its key. To use your phone, scan the QR in the “Use your phone” section above.</p>
+        <p><b>Can't find your TV?</b>Keep the TV on and connect both devices to the same network. Guest Wi-Fi can prevent them from seeing each other. Restart the TV and try again.</p>
+        <p><b>The connection was refused?</b>If the TV just turned on, give it a minute, then try pairing again.</p>
+        <p><b>Your PIN or saved connection expired?</b>Click Request code again, enter the new PIN shown on your TV, and click Confirm code.</p>
+        <p><b>The tile hasn't appeared?</b>Check the favorites row in your launcher. You may need to restart the TV.</p>
+        <p><b>Can I close the installer?</b>After installation is confirmed, choose “Quit Sidee” on macOS or press Ctrl+C in the Windows launcher's window. Nuvio and the Stremio TV build open online from the TV launcher, so Sidee can be off. Jellyfin still needs its server; Stremio needs a streaming server only for playback that depends on one.</p>
+        <p><b>Which Stremio is installed?</b>Sidee installs the full community-maintained VIDAA TV build based on Stremio Theater with a modern Stremio core — not the limited VIDAA Stremio Lite app. It is designed for remote-control focus, D-pad navigation and VIDAA viewport quirks. You can optionally link a LAN or Remote HTTPS streaming server.</p>
+        <p><b>Still seeing the old Nuvio icon?</b>Restart the installer and install Nuvio again. If the old image remains, remove its tile from the TV launcher and reinstall it.</p>
+        <p><b>Want to remove an app?</b>Open the tile's menu in the TV launcher and choose Remove.</p>
+      </div></details>
+      <details id="activity"><summary><svg class="icon" aria-hidden="true"><use href="#i-activity"/></svg>Connection activity<span class="activity-count" id="activityCount">Ready</span><svg class="icon chevron" aria-hidden="true"><use href="#i-chevron"/></svg></summary><div id="log" role="log" aria-label="Connection activity" aria-live="off"><span class="log-line">Ready when you are.</span></div></details>
+    </div>
+    <footer><div><p class="footer-brand">Small tool. A lot of heart.</p><p>Made by Sidee, after months of trying and nearly giving up.</p><p><button class="button secondary" id="btnUpdate"><span>Check for updates</span></button> <span id="updateNote" hidden></span></p></div></footer>
+  </main>
+  <a class="coffee" id="kofi" href="#" target="_blank" rel="noopener noreferrer" aria-label="Support Sidee on Ko-fi">
+    <span class="coffee-mark"><svg class="icon" aria-hidden="true"><use href="#i-coffee"/></svg></span>
+    <span class="coffee-copy"><strong>Support Sidee</strong><small>Keep it free · Ko-fi</small></span>
+  </a>
+  <script>
+    const $ = id => document.getElementById(id);
+    const KEY = new URLSearchParams(location.search).get("key") || "";
+    const api = (path, query = {}) => `${path}?${new URLSearchParams({...query, key: KEY})}`;
+    const KOFI = "KOFI_URL_PLACEHOLDER";
+    if (KOFI) $("kofi").href = KOFI;
+    else $("kofi").hidden = true;
+    let tv = null, linked = false, expiryTimer = null, installed = new Set(), devices = [];
+    let installBusy = false, findBusy = false;
+    let statusRevision = 0;
+    let pairingId = null, pairingTimer = null, pairBusy = false;
+    let phoneRevision = 0;
+
+    function log(message, cls = "") {
+      const line = document.createElement("span");
+      line.className = "log-line" + (cls ? " " + cls : "");
+      line.textContent = message;
+      $("log").append(line);
+      while ($("log").children.length > 80) $("log").firstElementChild.remove();
+      $("log").scrollTop = $("log").scrollHeight;
+      $("activityCount").textContent = cls === "err" ? "Needs attention" : cls === "ok" ? "All good" : "Working";
+      $("notice").textContent = message;
+      $("notice").className = cls;
+      $("notice").hidden = false;
+    }
+
+    async function request(path, data, query = {}) {
+      const options = data === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(data)};
+      const response = await fetch(api(path, query), options);
+      if (!response.ok) throw new Error("Dashboard unavailable. Open the link printed by Sidee and try again.");
+      return response.json();
+    }
+
+    function busy(id, on, label) {
+      const button = $(id);
+      if (!button.dataset.label) button.dataset.label = button.querySelector("span").textContent;
+      button.setAttribute("aria-busy", String(on));
+      button.querySelector("span").textContent = on ? label : button.dataset.label;
+      button.disabled = on;
+    }
+
+    function updateInstallButtons() {
+      const disabled = !linked || installBusy || findBusy;
+      document.querySelectorAll(".grid-install, .grid-launch").forEach(button => { button.disabled = disabled; });
+      document.querySelectorAll(".grid-remove").forEach(button => { button.disabled = installBusy || findBusy; });
+    }
+
+    function updatePairControls() {
+      $("btnRequest").disabled = !tv || pairBusy || installBusy || findBusy;
+      $("btnPair").disabled = !pairingId || pairBusy || installBusy || findBusy;
+      $("pin").disabled = !pairingId || pairBusy || installBusy || findBusy;
+      $("tvselect").disabled = pairBusy || installBusy || findBusy;
+      $("btnFindIp").disabled = pairBusy || installBusy || findBusy;
+      $("manualIp").disabled = pairBusy || installBusy || findBusy;
+    }
+
+    function resetPairing(cancel = true) {
+      const previous = pairingId;
+      pairingId = null;
+      clearTimeout(pairingTimer);
+      $("pin").value = "";
+      $("pin").removeAttribute("aria-invalid");
+      $("pinError").hidden = true;
+      $("pinHelp").textContent = "Click Request code to display a new PIN on your TV.";
+      $("btnRequest").dataset.label = "Request code";
+      $("btnRequest").querySelector("span").textContent = "Request code";
+      updatePairControls();
+      if (cancel && previous) request("/api/pair/cancel", {pairing_id: previous}).catch(() => {});
+    }
+
+    function setLinked(on, name) {
+      linked = on;
+      document.body.classList.toggle("is-linked", on);
+      $("tvchip").textContent = on ? "Paired · " + name : "TV not connected";
+      if (!on) $("tvchip").removeAttribute("title");
+      $("statusChip").classList.toggle("on", on);
+      $("pairbadge").hidden = !on;
+      $("btnForget").hidden = !on;
+      $("setupMeta").hidden = on;
+      $("stepFind").classList.toggle("complete", Boolean(tv));
+      $("stepFind").classList.toggle("current", !tv);
+      $("stepPair").classList.toggle("complete", on);
+      $("stepPair").classList.toggle("current", Boolean(tv) && !on);
+      $("stepInstall").classList.toggle("current", on);
+      $("readyText").textContent = on ? "You're ready. Choose an app below." : "Pair your TV to unlock installation";
+      $("readyIcon").querySelector("use").setAttribute("href", on ? "#i-check" : "#i-lock");
+      $("installHint").hidden = on;
+      if (on) { $("notice").hidden = true; loadCatalog(); }
+      updateInstallButtons();
+      updatePairControls();
+    }
+
+    function selectTV(device) {
+      const changed = tv && tv.host !== device.host;
+      tv = device;
+      if (changed) {
+        resetPairing();
+        clearTimeout(expiryTimer);
+        installed.clear();
+        $("banner").hidden = true;
+        setLinked(false);
+        statusRevision++;
+      }
+      $("tvname").textContent = device.friendly_name + " · " + device.host;
+      updatePairControls();
+      $("stepFind").classList.add("complete");
+      $("stepFind").classList.remove("current");
+      $("stepPair").classList.toggle("current", !linked);
+    }
+
+    function clearTV() {
+      resetPairing();
+      clearTimeout(expiryTimer);
+      statusRevision++;
+      tv = null;
+      devices = [];
+      installed.clear();
+      $("banner").hidden = true;
+      $("tvname").textContent = "Turn on your TV and connect it to the same network as this device.";
+      $("tvselect").replaceChildren();
+      $("deviceField").hidden = true;
+      $("tvchip").removeAttribute("title");
+      setLinked(false);
+    }
+
+    $("btnFind").onclick = async () => {
+      const previousHost = tv && tv.host;
+      findBusy = true;
+      clearTV();
+      loadPhoneAccess();
+      busy("btnFind", true, "Searching…");
+      log("Looking for your TV on the local network…");
+      try {
+        const result = await request("/api/discover");
+        if (result.ok && result.tvs.length) {
+          devices = result.tvs;
+          $("tvselect").replaceChildren(...devices.map(device => {
+            const option = document.createElement("option");
+            option.value = device.host;
+            option.textContent = device.friendly_name + " · " + device.host;
+            return option;
+          }));
+          $("deviceField").hidden = devices.length < 2;
+          const selected = devices.find(device => device.host === previousHost) || devices[0];
+          $("tvselect").value = selected.host;
+          selectTV(selected);
+          await syncStatus();
+          loadPhoneAccess();
+          log("Found " + selected.friendly_name + " at " + selected.host
+            + (linked ? ". Your saved connection is ready. Choose an app below." : ". Click Request code to connect."), "ok");
+        } else log(result.error || "No TV found. Make sure your TV is switched on and on the same Wi-Fi as this device, then search again \u2014 or enter the TV's IP address below and check it.", "err");
+      } catch (error) { log(error.message || "The search was interrupted. Try again.", "err"); }
+      finally {
+        findBusy = false;
+        busy("btnFind", false);
+        updatePairControls();
+        updateInstallButtons();
+      }
+    };
+    $("btnFindIp").onclick = async () => {
+      if (findBusy || pairBusy || installBusy) return;
+      const host = $("manualIp").value.trim();
+      $("manualError").hidden = true;
+      if (!host) {
+        $("manualError").textContent = "Enter the IPv4 address shown on your TV.";
+        $("manualError").hidden = false;
+        $("manualIp").focus();
+        return;
+      }
+      findBusy = true;
+      clearTV();
+      loadPhoneAccess();
+      busy("btnFindIp", true, "Checking…");
+      $("btnFind").disabled = true;
+      updatePairControls();
+      log("Checking your TV directly at " + host + "…");
+      try {
+        const result = await request("/api/tv/check", {host});
+        if (!result.ok || !result.tv) throw new Error(result.error || "TV could not be verified.");
+        devices = [result.tv];
+        const option = document.createElement("option");
+        option.value = result.tv.host;
+        option.textContent = result.tv.friendly_name + " · " + result.tv.host;
+        $("tvselect").replaceChildren(option);
+        $("tvselect").value = result.tv.host;
+        $("deviceField").hidden = true;
+        selectTV(result.tv);
+        await syncStatus();
+        loadPhoneAccess();
+        log(result.message || "TV verified. Click Request code to pair.", "ok");
+      } catch (error) {
+        $("manualError").textContent = error.message || "Couldn't check this TV IP.";
+        $("manualError").hidden = false;
+        log($("manualError").textContent, "err");
+      } finally {
+        findBusy = false;
+        busy("btnFindIp", false);
+        $("btnFind").disabled = false;
+        updatePairControls();
+        updateInstallButtons();
+      }
+    };
+    $("manualIp").oninput = () => { $("manualError").hidden = true; };
+    $("manualIp").onkeydown = event => {
+      if (event.key === "Enter" && !$("btnFindIp").disabled) $("btnFindIp").click();
+    };
+    $("tvselect").onchange = async () => {
+      const selected = devices.find(device => device.host === $("tvselect").value);
+      if (selected) {
+        selectTV(selected);
+        loadPhoneAccess();
+        try { await syncStatus(); }
+        catch (error) { setLinked(false); log(error.message, "err"); }
+      }
+    };
+    $("btnRequest").onclick = async () => {
+      if (!tv || pairBusy || installBusy) return;
+      resetPairing(false);
+      clearTimeout(expiryTimer);
+      statusRevision++;
+      setLinked(false);
+      pairBusy = true;
+      busy("btnRequest", true, "Requesting…");
+      updatePairControls();
+      $("btnFind").disabled = true;
+      $("tvselect").disabled = true;
+      log("Requesting a code. Look at your TV screen…");
+      try {
+        const result = await request("/api/pair/start", {host: tv.host});
+        if (result.ok && result.pairing_id) {
+          pairingId = result.pairing_id;
+          $("pinHelp").textContent = "Enter the 4-digit PIN shown on your TV, then click Confirm code.";
+          $("btnRequest").dataset.label = "Request new code";
+          log("The code is on your TV. Enter it here to connect.", "ok");
+          pairingTimer = setTimeout(() => {
+            resetPairing();
+            log("The code request expired. Click Request code to try again.", "err");
+          }, Math.max(0, result.expires_in) * 1000);
+        } else log(result.error || "The TV didn't display a code. Try requesting it again.", "err");
+      } catch (error) { log(error.message || "Couldn't request a code. Try again.", "err"); }
+      finally {
+        pairBusy = false;
+        busy("btnRequest", false);
+        updatePairControls();
+        $("btnFind").disabled = false;
+        $("tvselect").disabled = false;
+        if (pairingId) $("pin").focus();
+      }
+    };
+    $("pin").oninput = () => {
+      $("pin").value = $("pin").value.replace(/[^0-9]/g, "").slice(0, 4);
+      $("pin").removeAttribute("aria-invalid");
+      $("pinError").hidden = true;
+    };
+    $("pin").onkeydown = event => { if (event.key === "Enter" && !$("btnPair").disabled) $("btnPair").click(); };
+    $("btnForget").onclick = async () => {
+      if (!linked) return;
+      if (!confirm("Forget this TV? Sidee will no longer be paired with it. Tiles already installed on the TV stay there, and you can pair again any time.")) return;
+      try {
+        const result = await request("/api/forget", {});
+        if (!result.ok) throw new Error("Couldn't forget this TV. Try again.");
+        setLinked(false);
+        resetPairing(false);
+        loadCatalog();
+        syncStatus().catch(() => {});
+        log("TV forgotten. Pair another TV to continue.", "ok");
+      } catch (error) {
+        log(error.message || "Couldn't forget this TV. Try again.", "err");
+      }
+    };
+    $("btnUpdate").onclick = async () => {
+      const note = $("updateNote");
+      note.hidden = false;
+      busy("btnUpdate", true, "Checking\u2026");
+      try {
+        const result = await request("/api/update");
+        if (!result.ok) { note.textContent = result.error || "Couldn't check for updates. Try again."; return; }
+        note.textContent = "";
+        if (result.update_available) {
+          note.append("Sidee " + result.latest + " is available. ");
+          const link = document.createElement("a");
+          link.href = result.url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = "Download it from GitHub Releases";
+          note.append(link);
+        } else {
+          note.textContent = "You're up to date (Sidee " + result.current + ").";
+        }
+      } catch (error) {
+        note.textContent = "Couldn't check for updates. Try again.";
+      } finally {
+        busy("btnUpdate", false);
+      }
+    };
+    $("btnPair").onclick = async () => {
+      if (!tv || !pairingId || pairBusy) return;
+      const pin = $("pin").value.trim();
+      if (!/^[0-9]{4}$/.test(pin)) {
+        $("pinError").textContent = "Enter all 4 digits shown on your TV.";
+        $("pinError").hidden = false;
+        $("pin").setAttribute("aria-invalid", "true");
+        $("pin").focus();
+        return;
+      }
+      clearTimeout(pairingTimer);
+      pairBusy = true;
+      busy("btnPair", true, "Connecting…");
+      updatePairControls();
+      $("btnFind").disabled = true;
+      $("tvselect").disabled = true;
+      log("Making the connection to your TV…");
+      try {
+        const result = await request("/api/pair", {pairing_id: pairingId, pin});
+        resetPairing(false);
+        if (result.ok) {
+          await syncStatus();
+          $("pinHelp").textContent = "Your TV is connected. Choose an app below.";
+          if (linked) log("Your TV is paired. Choose an app below.", "ok");
+        } else {
+          log(result.error || "Couldn't connect. Request a new code and try again.", "err");
+        }
+      } catch (error) { resetPairing(); log(error.message || "The connection was interrupted. Request a new code.", "err"); }
+      finally {
+        pairBusy = false;
+        busy("btnPair", false);
+        updatePairControls();
+        $("btnFind").disabled = false;
+        $("tvselect").disabled = false;
+      }
+    };
+
+    const STRINGS = {
+      install: "Install", launch: "Open", installing: "Installing…", launching: "Opening…",
+      installed: "Installed", unknown: "Not checked yet", remove: "Remove",
+      noMatch: "No apps match your search.", loading: "Loading apps…"
+    };
+    let catalogApps = [], catalogFilter = "All", catalogSearch = "", catalogLoading = false, catalogStateText = "";
+    function gridButtonId(key, kind) { return "btn-grid-" + kind + "-" + key; }
+    function updateInstallButtons() {
+      const disabled = !linked || installBusy || findBusy;
+      document.querySelectorAll(".grid-install, .grid-launch").forEach(button => { button.disabled = disabled; });
+      document.querySelectorAll(".grid-remove").forEach(button => { button.disabled = installBusy || findBusy; });
+    }
+    function serverFor(key) {
+      const input = $("srv-" + key);
+      return input ? input.value.trim() : "";
+    }
+    function setGridButtonBusy(button, on, label) {
+      if (!button) return;
+      if (!button.dataset.label) button.dataset.label = button.querySelector("span").textContent;
+      button.querySelector("span").textContent = on ? label : button.dataset.label;
+      button.disabled = on;
+    }
+    async function installApp(key, name, server) {
+      if (!linked || installBusy) return;
+      const button = $(gridButtonId(key, "install"));
+      installBusy = true;
+      setGridButtonBusy(button, true, STRINGS.installing);
+      updateInstallButtons();
+      updatePairControls();
+      $("btnFind").disabled = true;
+      $("tvselect").disabled = true;
+      $("banner").hidden = true;
+      log("Adding " + name + " to your TV launcher…");
+      try {
+        const result = await request("/api/install", Object.assign({app: key}, server ? {server} : {}));
+        if (result.ok) {
+          const entry = catalogApps.find(app => app.key === key);
+          if (entry) entry.installed = true;
+          renderGrid();
+          $("bannerTitle").textContent = name + " is home.";
+          $("bannerText").textContent = "Press Home on your TV and select its tile. You can stop Sidee with Quit Sidee on macOS or Ctrl+C on Windows.";
+          $("banner").hidden = false;
+          log(name + " is installed. Take a look at your TV launcher.", "ok");
+          try { await syncStatus(); }
+          catch (_) { log(name + " was installed, but connection status couldn't be checked. Refresh the dashboard before installing another app.", "err"); setLinked(false); }
+        } else if (result.status === "unconfirmed") {
+          log(result.message || "Check Home on your TV before trying the installation again.");
+          $("activityCount").textContent = "Check TV";
+        } else if (!handleAuth(result)) log(result.error || "Your TV didn't confirm installation. Try again.", "err");
+      } catch (error) { log(error.message || "The connection was interrupted. Try installing again.", "err"); }
+      finally {
+        installBusy = false;
+        setGridButtonBusy(button, false);
+        updateInstallButtons();
+        updatePairControls();
+        $("btnFind").disabled = false;
+        $("tvselect").disabled = false;
+      }
+    }
+    async function launchApp(key, name, server) {
+      if (!linked || installBusy) return;
+      const button = $(gridButtonId(key, "launch"));
+      installBusy = true;
+      setGridButtonBusy(button, true, STRINGS.launching);
+      updateInstallButtons();
+      log("Opening " + name + " on your TV…");
+      try {
+        const result = await request("/api/launch", Object.assign({app: key}, server ? {server} : {}));
+        if (result.ok) log(name + " was opened on your TV.", "ok");
+        else if (!handleAuth(result)) log(result.error || "Your TV didn't open the app. Try again.", "err");
+      } catch (error) { log(error.message || "The connection was interrupted. Try opening again.", "err"); }
+      finally {
+        installBusy = false;
+        setGridButtonBusy(button, false);
+        updateInstallButtons();
+      }
+    }
+    function renderFilters() {
+      const container = $("appFilters");
+      container.textContent = "";
+      const categories = ["All"].concat(catalogApps.map(app => app.category).filter((value, index, list) => list.indexOf(value) === index));
+      categories.forEach(category => {
+        const button = document.createElement("button");
+        button.className = "button secondary";
+        button.textContent = category;
+        button.setAttribute("aria-pressed", String(catalogFilter === category));
+        button.onclick = () => { catalogFilter = category; renderFilters(); renderGrid(); };
+        container.appendChild(button);
+      });
+    }
+    function renderGrid() {
+      const grid = $("appGrid");
+      grid.textContent = "";
+      const query = catalogSearch.toLowerCase();
+      const shown = catalogApps.filter(app => (catalogFilter === "All" || app.category === catalogFilter) && (!query || (app.name + " " + (app.description || "")).toLowerCase().includes(query)));
+      if (!shown.length) {
+        const empty = document.createElement("p");
+        empty.textContent = catalogApps.length ? STRINGS.noMatch : STRINGS.loading;
+        grid.appendChild(empty);
+        updateInstallButtons();
+        return 0;
+      }
+      shown.forEach(app => {
+        const article = document.createElement("article");
+        article.className = "panel app";
+        const body = document.createElement("div");
+        body.className = "app-body";
+        article.appendChild(body);
+        const head = document.createElement("div");
+        head.className = "app-title";
+        const title = document.createElement("h3");
+        title.textContent = app.name;
+        head.appendChild(title);
+        const pill = document.createElement("span");
+        pill.className = "app-pill";
+        pill.textContent = app.category + (app.source === "custom" ? " · Custom" : "");
+        head.appendChild(pill);
+        body.appendChild(head);
+        const imgSrc = app.icon && app.icon.startsWith("assets/") ? "/" + app.icon : (app.image || "");
+        if (imgSrc) {
+          const img = document.createElement("img");
+          img.className = "app-icon";
+          img.src = imgSrc;
+          img.alt = "";
+          img.onerror = () => img.remove();
+          img.width = 50;
+          img.height = 50;
+          body.appendChild(img);
+        }
+        const desc = document.createElement("p");
+        desc.className = "app-description";
+        desc.textContent = app.description || "";
+        body.appendChild(desc);
+        if (app.needs_server || app.server_builder) {
+          const field = document.createElement("div");
+          field.className = "field";
+          const label = document.createElement("label");
+          label.setAttribute("for", "srv-" + app.key);
+          label.textContent = app.server_placeholder || "Server address";
+          field.appendChild(label);
+          const input = document.createElement("input");
+          input.id = "srv-" + app.key;
+          input.type = "text";
+          input.inputMode = "url";
+          input.spellcheck = false;
+          input.placeholder = app.server_placeholder || "";
+          field.appendChild(input);
+          body.appendChild(field);
+        }
+        const bottom = document.createElement("div");
+        bottom.className = "app-bottom";
+        const note = document.createElement("span");
+        note.className = "app-note";
+        note.textContent = app.installed === true ? STRINGS.installed : app.installed === false ? "" : STRINGS.unknown;
+        bottom.appendChild(note);
+        const action = document.createElement("button");
+        const isInstalled = app.installed === true;
+        action.className = "button" + (isInstalled ? " secondary grid-launch" : " grid-install");
+        action.id = gridButtonId(app.key, isInstalled ? "launch" : "install");
+        const actionLabel = document.createElement("span");
+        actionLabel.textContent = (isInstalled ? STRINGS.launch : STRINGS.install) + " " + app.name;
+        action.appendChild(actionLabel);
+        action.onclick = () => {
+          const server = serverFor(app.key);
+          if (isInstalled) launchApp(app.key, app.name, server);
+          else {
+            if (app.needs_server && !server) {
+              log(app.name + " requires your server address.", "err");
+              const input = $("srv-" + app.key);
+              if (input) input.focus();
+              return;
+            }
+            installApp(app.key, app.name, server);
+          }
+        };
+        bottom.appendChild(action);
+        if (app.source === "custom") {
+          const remove = document.createElement("button");
+          remove.className = "button secondary grid-remove";
+          const removeLabel = document.createElement("span");
+          removeLabel.textContent = STRINGS.remove + " " + app.name;
+          remove.appendChild(removeLabel);
+          remove.onclick = async () => {
+            if (!confirm("Remove " + app.name + " from your custom apps?")) return;
+            const result = await request("/api/custom/remove", {app_id: app.app_id});
+            if (result.ok) { log(app.name + " was removed.", "ok"); loadCatalog(true); }
+            else log(result.error || "Could not remove the custom app.", "err");
+          };
+          bottom.appendChild(remove);
+        }
+        body.appendChild(bottom);
+        grid.appendChild(article);
+      });
+      updateInstallButtons();
+      return shown.length;
+    }
+    async function loadCatalog(force) {
+      if (catalogLoading) return;
+      catalogLoading = true;
+      try {
+        const result = await request("/api/catalog", undefined, force ? {force: "1"} : {});
+        if (result.ok) {
+          catalogApps = result.apps || [];
+          let text = "";
+          if (result.cached) text = "Installed state from cache.";
+          else if (result.refreshed_at) text = "Installed state updated " + new Date(result.refreshed_at * 1000).toLocaleTimeString() + ".";
+          else if (!result.paired) text = "Pair your TV to check which apps are installed.";
+          else text = "Installed state could not be checked.";
+          if (result.tv_error) text += " TV check: " + result.tv_error;
+          if (result.custom_error) text += " " + result.custom_error;
+          catalogStateText = text;
+          $("gridState").textContent = text;
+          renderFilters();
+          renderGrid();
+        } else log(result.error || "Couldn't load apps.", "err");
+      } catch (error) { log(error.message || "Couldn't load apps.", "err"); }
+      finally { catalogLoading = false; }
+    }
+    $("appSearch").oninput = () => {
+      catalogSearch = $("appSearch").value.trim();
+      const count = renderGrid();
+      $("gridState").textContent = catalogSearch
+        ? (count === 0 ? "No apps match your search." : "Showing " + count + (count === 1 ? " app." : " apps."))
+        : catalogStateText;
+    };
+    $("btnRefreshCatalog").onclick = () => loadCatalog(true);
+    $("btnDiagnostics").onclick = async () => {
+      const results = $("diagResults");
+      results.textContent = "Checking your setup…";
+      try {
+        const result = await request("/api/diagnostics");
+        results.textContent = "";
+        const list = document.createElement("ul");
+        result.steps.forEach(step => {
+          const item = document.createElement("li");
+          item.textContent = (step.ok === true ? "✓ " : step.ok === false ? "✗ " : "– ") + step.name + ": " + step.detail;
+          list.appendChild(item);
+        });
+        results.appendChild(list);
+        log(result.ok ? "Setup check passed." : "Setup check found a problem. See the results above.", result.ok ? "ok" : "err");
+      } catch (error) { results.textContent = error.message || "Setup check failed."; }
+    };
+    $("btnAddCustom").onclick = async () => {
+      const data = {
+        app_id: $("customAppId").value.trim(),
+        name: $("customName").value.trim(),
+        url: $("customUrl").value.trim(),
+        image: $("customImage").value.trim(),
+        description: $("customDescription").value.trim(),
+        category: $("customCategory").value
+      };
+      $("customError").hidden = true;
+      const result = await request("/api/custom", data);
+      if (result.ok) {
+        log(data.name + " was added to your grid.", "ok");
+        ["customAppId", "customName", "customUrl", "customImage", "customDescription"].forEach(id => { $(id).value = ""; });
+        loadCatalog(true);
+      } else {
+        $("customError").textContent = result.error || "Could not add the custom app.";
+        $("customError").hidden = false;
+      }
+    };
+    function applyStatus(status) {
+      clearTimeout(expiryTimer);
+      if (!tv) {
+        setLinked(false);
+        return;
+      }
+      const ready = status.paired && status.state === "ok"
+        && (!status.expires_at || Date.now() < status.expires_at * 1000)
+        && tv && tv.host === status.host;
+      setLinked(Boolean(ready), tv ? tv.friendly_name : status.host);
+      if (ready) $("tvchip").title = status.host;
+      if (status.paired && !ready && tv.host === status.host) {
+        $("tvchip").textContent = "Pairing needs renewal";
+        resetPairing();
+        log("Your TV connection has expired. Click Request code to reconnect.", "err");
+      } else if (status.host === tv.host && status.message && status.state !== "needs_pairing") log(status.message, ready ? "ok" : "err");
+      if (ready && status.expires_at) {
+        const revision = statusRevision;
+        const delay = Math.min(status.expires_at * 1000 - Date.now(), 2147483647);
+        expiryTimer = setTimeout(() => { if (revision === statusRevision) applyStatus(status); }, Math.max(0, delay));
+      }
+    }
+    async function syncStatus() {
+      const revision = statusRevision;
+      try {
+        const status = await request("/api/status");
+        if (revision === statusRevision) applyStatus(status);
+      } catch (error) {
+        if (revision === statusRevision) throw error;
+      }
+    }
+    function handleAuth(response) {
+      if (!response.needs_pairing) return false;
+      clearTimeout(expiryTimer);
+      statusRevision++;
+      setLinked(false);
+      resetPairing();
+      log("Your TV needs to reconnect. Click Request code and enter the PIN shown on your TV.", "err");
+      return true;
+    }
+    async function loadPhoneAccess() {
+      const selectedHost = tv ? tv.host : "";
+      const revision = ++phoneRevision;
+      $("phoneQr").hidden = true;
+      $("phoneQr").removeAttribute("src");
+      $("phoneLink").hidden = true;
+      $("phoneLink").removeAttribute("href");
+      $("phoneMessage").textContent = "Preparing your QR code…";
+      $("phoneMessage").hidden = false;
+      try {
+        const result = await request("/api/phone", undefined, selectedHost ? {tv_host: selectedHost} : {});
+        if (revision !== phoneRevision || (tv ? tv.host : "") !== selectedHost) return;
+        if (!result.ok) throw new Error(result.error || "Couldn't prepare the phone QR code. Refresh this page to try again.");
+        $("phoneQr").src = result.qr;
+        $("phoneQr").hidden = false;
+        $("phoneLink").href = result.url;
+        $("phoneLink").textContent = result.url;
+        $("phoneLink").hidden = false;
+        $("phoneMessage").hidden = true;
+      } catch (error) {
+        if (revision !== phoneRevision || (tv ? tv.host : "") !== selectedHost) return;
+        $("phoneQr").hidden = true;
+        $("phoneLink").hidden = true;
+        $("phoneMessage").hidden = false;
+        $("phoneMessage").textContent = error.message || "Couldn't prepare the phone QR code. Refresh this page to try again.";
+      }
+    }
+    loadPhoneAccess();
+    loadCatalog();
+    syncStatus().catch(error => { setLinked(false); log(error.message || "Couldn't check the connection. Refresh the dashboard to try again.", "err"); });
+  </script>
+</body>
+</html>
