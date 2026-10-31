@@ -4,7 +4,8 @@ A minimal APK that proves the plan's spike gate before any commitment
 to a full Android build:
 
 1. Chaquopy runs the shared Python core + `paho-mqtt` and the
-   dashboard server starts on loopback inside the app.
+   dashboard server starts inside the app, bound to all interfaces
+   so LAN devices (a TV browser opening `/tv/`) can reach it.
 2. SSDP discovery with a Wi-Fi multicast lock (the Activity acquires
    one; a TV, or a simulated TV on the LAN, is still needed to prove
    discovery end to end).
@@ -26,8 +27,13 @@ to a full Android build:
 - The WebView loads **only** `127.0.0.1` / `localhost`. Every other
   URL is refused in `shouldOverrideUrlLoading`. Tile URLs are sent
   to the TV by the dashboard code, never opened in the WebView.
-- The dashboard binds loopback only (`host="127.0.0.1"`), a new
-  option on `core.webui.Dashboard` (desktop default unchanged).
+  (The WebView restriction does not apply to the TV's own browser,
+  which opens the phone's LAN address.)
+- The dashboard binds all interfaces (`host="0.0.0.0"`), so a TV
+  browser on the same Wi-Fi can open `/tv/` at the phone's LAN
+  address (shown in the dashboard's phone section). The dashboard
+  URL handed to the WebView stays loopback. Access is still gated
+  by the dashboard key, as on desktop.
 - Spike application ID: `io.github.johncarter2021.sidee` (fork
   owner). A release identifier is still an open decision.
 - Sideload only in v1 (no Play). Unsigned debug APK in CI.
