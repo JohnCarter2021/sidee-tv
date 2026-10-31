@@ -97,7 +97,8 @@ class EnsureTileTest(unittest.TestCase):
         self.session.host = "192.168.1.5"
         self.load_mock = self._start_patch(webui.client.Session, "load",
                                            return_value=self.session)
-        self.list_tiles = self._start_patch(webui.client, "list_tiles")
+        self.snapshot = self._start_patch(webui.client,
+                                          "applist_snapshot")
         self.add_tile = self._start_patch(webui.client, "add_tile")
         self._start_patch(webui, "_local_ip",
                           return_value="192.168.1.20")
@@ -113,35 +114,52 @@ class EnsureTileTest(unittest.TestCase):
             "192.168.1.20", self.dashboard.port, webui.ACCESS_KEY)
 
     def test_installs_when_missing(self):
-        self.list_tiles.return_value = []
+        self.snapshot.return_value = []
         self.dashboard._ensure_sidee_tv_tile_once()
         self.add_tile.assert_called_once_with(
             self.session, "sidee_tv", "Sidee TV", self._expected_url(), "")
+        self.assertEqual(self.dashboard.tile_status["state"], "installed")
+        self.assertEqual(self.dashboard.tile_status["url"],
+                         self._expected_url())
 
     def test_skips_when_current_tile_present(self):
-        self.list_tiles.return_value = [{"appId": "sidee_tv",
-                                         "url": self._expected_url()}]
+        self.snapshot.return_value = [{"appId": "sidee_tv",
+                                       "url": self._expected_url()}]
         self.dashboard._ensure_sidee_tv_tile_once()
         self.add_tile.assert_not_called()
+        self.assertEqual(self.dashboard.tile_status["state"], "up_to_date")
 
     def test_reinstalls_when_tile_points_elsewhere(self):
-        self.list_tiles.return_value = [{"appId": "sidee_tv",
-                                         "url": "https://example.com/old"}]
+        self.snapshot.return_value = [{"appId": "sidee_tv",
+                                       "url": "https://example.com/old"}]
         self.dashboard._ensure_sidee_tv_tile_once()
         self.add_tile.assert_called_once_with(
             self.session, "sidee_tv", "Sidee TV", self._expected_url(), "")
+        self.assertEqual(self.dashboard.tile_status["state"], "installed")
 
     def test_skips_without_pairing(self):
         self.load_mock.side_effect = webui.client.AuthError("gone",
                                                             "no session")
         self.dashboard._ensure_sidee_tv_tile_once()
-        self.list_tiles.assert_not_called()
+        self.snapshot.assert_not_called()
         self.add_tile.assert_not_called()
+        self.assertEqual(self.dashboard.tile_status["state"], "no_pairing")
 
     def test_skips_when_tv_unreachable(self):
-        self.list_tiles.side_effect = OSError("no route")
+        self.snapshot.side_effect = OSError("no route")
         self.dashboard._ensure_sidee_tv_tile_once()
         self.add_tile.assert_not_called()
+        self.assertEqual(self.dashboard.tile_status["state"],
+                         "tv_unreachable")
+
+    def test_skips_when_applist_unanswered(self):
+        # A timeout is NOT an empty list: installing on an unknown state
+        # risks duplicating a tile the TV already has but did not report.
+        self.snapshot.return_value = None
+        self.dashboard._ensure_sidee_tv_tile_once()
+        self.add_tile.assert_not_called()
+        self.assertEqual(self.dashboard.tile_status["state"],
+                         "tv_unreachable")
 
 
 if __name__ == "__main__":

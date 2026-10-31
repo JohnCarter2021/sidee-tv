@@ -18,14 +18,19 @@ _dashboard = None
 def start(state_dir: str) -> str:
     """Start the dashboard on all interfaces and return the loopback
     URL for the in-app WebView. LAN devices reach the same server at
-    the phone's Wi-Fi address (see the dashboard's phone section)."""
+    the phone's Wi-Fi address (see the dashboard's phone section).
+
+    No port is pinned here on purpose: the dashboard prefers its saved
+    port (then 8787), so the Sidee TV tile's address stays stable across
+    app launches instead of changing with every random port.
+    """
     global _dashboard
     if _dashboard is not None:
         return _dashboard.url
     os.environ["SIDEE_STATE_DIR"] = state_dir
     from core import webui
 
-    _dashboard = webui.Dashboard(port=0, headless=True, host="0.0.0.0")
+    _dashboard = webui.Dashboard(headless=True, host="0.0.0.0")
     _dashboard.start()
     return _dashboard.url
 

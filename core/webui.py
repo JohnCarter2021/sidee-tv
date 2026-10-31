@@ -324,7 +324,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
         elif path == "/api/status":
-            self._json(_status())
+            data = _status()
+            dashboard = getattr(self.server, "dashboard", None)
+            if dashboard is not None:
+                data["tile"] = dashboard.tile_status
+            self._json(data)
         elif path == "/api/update":
             self._json(update_check.check())
         elif path == "/api/phone":
@@ -682,7 +686,12 @@ class Dashboard:
         self.server.timeout = 0.2
         self.thread = None
         self.tile_thread = None
+        # Replaced whole, never mutated, so /api/status can read it from
+        # the request thread without a lock.
+        self.tile_status = {"state": "pending", "checked_at": None,
+                            "url": None}
         self.error = None
+        self.server.dashboard = self
 
     def start(self) -> None:
         try:
@@ -720,18 +729,22 @@ class Dashboard:
     def open(self) -> bool:
         return webbrowser.open(self.url)
 
+    def _set_tile_status(self, state: str, url: str | None) -> None:
+        self.tile_status = {"state": state, "checked_at": int(time.time()),
+                            "url": url}
+
     def _ensure_sidee_tv_tile(self) -> None:
         """Keep a Sidee TV tile on the paired TV, with zero user steps.
 
         Runs in the background for the dashboard's lifetime: every two
-        minutes (first check after 30 seconds, so startup stays fast) it
+        minutes (first check after 10 seconds, so startup stays fast) it
         looks at the paired TV's tile list and installs the Sidee TV tile
         when it is missing or points at an old address. Reinstalling under
         the same tile id replaces the old tile instead of duplicating it.
-        No pairing yet, TV unreachable, or any MQTT error: skip quietly
-        and retry on the next cycle.
+        No pairing yet, TV unreachable, or any MQTT error: record the
+        state for /api/status and retry on the next cycle.
         """
-        if self.stop_event.wait(30):
+        if self.stop_event.wait(10):
             return
         while not self.stop_event.is_set():
             try:
@@ -745,27 +758,40 @@ class Dashboard:
         try:
             session = client.Session.load()
         except (client.AuthError, OSError):
+            self._set_tile_status("no_pairing", None)
             return  # no pairing yet (or a corrupt one): nothing to do
         try:
-            tiles = client.list_tiles(session)
+            tiles = client.applist_snapshot(session)
         except Exception:
+            self._set_tile_status("tv_unreachable", None)
             return  # TV unreachable: retry on the next cycle
+        if tiles is None:
+            # The TV did not answer the app list: do NOT install on an
+            # unknown state, or a slow TV ends up with duplicate tiles.
+            self._set_tile_status("tv_unreachable", None)
+            return
         host_ip = _local_ip(session.host)
         try:
             address = ipaddress.ip_address(host_ip)
         except ValueError:
+            self._set_tile_status("no_lan", None)
             return
         if address.is_loopback or address.is_unspecified:
-            return  # no LAN route to the TV: a loopback tile is useless
+            # No LAN route to the TV: a loopback tile is useless.
+            self._set_tile_status("no_lan", None)
+            return
         url = tv_frontend.absolute_tv_url(host_ip, self.port, ACCESS_KEY)
         if any(isinstance(t, dict) and
                client.tile_matches_request(t, "sidee_tv", url)
                for t in tiles):
+            self._set_tile_status("up_to_date", url)
             return
         try:
             client.add_tile(session, "sidee_tv", "Sidee TV", url, "")
         except Exception:
+            self._set_tile_status("tv_unreachable", None)
             return
+        self._set_tile_status("installed", url)
         print("Sidee TV tile installed on your TV -- open it to browse "
               "and play with the remote.", flush=True)
 

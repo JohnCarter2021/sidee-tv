@@ -927,6 +927,16 @@
         const delay = Math.min(status.expires_at * 1000 - Date.now(), 2147483647);
         expiryTimer = setTimeout(() => { if (revision === statusRevision) applyStatus(status); }, Math.max(0, delay));
       }
+      if (status.tile && status.tile.state && status.tile.state !== "pending") {
+        const tileText = {
+          up_to_date: "Sidee TV tile is on your TV and up to date.",
+          installed: "Sidee TV tile was just installed on your TV.",
+          no_pairing: "Sidee TV tile is waiting: pair your TV first.",
+          tv_unreachable: "Sidee TV tile could not be checked: the TV did not answer. It retries on its own.",
+          no_lan: "Sidee TV tile is waiting: this device has no LAN address for the TV to reach."
+        }[status.tile.state];
+        if (tileText) log(tileText, status.tile.state === "up_to_date" || status.tile.state === "installed" ? "ok" : "err");
+      }
     }
     async function syncStatus() {
       const revision = statusRevision;

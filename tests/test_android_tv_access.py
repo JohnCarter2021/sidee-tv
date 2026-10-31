@@ -33,6 +33,24 @@ class TestAndroidTvAccess(unittest.TestCase):
         hosts = dashboard_host_kwargs(tree)
         self.assertEqual(hosts, ["0.0.0.0"])
 
+    def test_entry_does_not_pin_a_random_port(self):
+        # The dashboard must prefer its saved port (then 8787) so the
+        # Sidee TV tile's address survives app restarts; pinning port=0
+        # gave every launch a new address and left the tile stale until
+        # the auto-tile thread reinstalled it.
+        tree = ast.parse(ENTRY.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                func = node.func
+                name = getattr(func, "attr", None) or getattr(func, "id", None)
+                if name == "Dashboard":
+                    for kw in node.keywords:
+                        if kw.arg == "port":
+                            self.assertFalse(
+                                isinstance(kw.value, ast.Constant)
+                                and kw.value.value == 0,
+                                "Dashboard must not pin port=0")
+
     def test_entry_still_returns_loopback_url_for_webview(self):
         # Dashboard.url is loopback by construction (see core/webui.py);
         # the entry must keep returning it for the in-app WebView.

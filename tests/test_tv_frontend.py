@@ -247,5 +247,24 @@ class TestStreamResponse(unittest.TestCase):
         self.assertEqual(code, 502)
 
 
+class TestPlayerPage(unittest.TestCase):
+    def test_hint_survives_manifest_and_fatal_errors_retry(self):
+        html = tv_frontend.player_page(
+            "Show", 3, "/tv/stream?u=x&key=k", "/tv/page?u=y&key=k")
+        # The hint must NOT hide on manifest parse: autoplay blocks and
+        # manifest failures otherwise leave a black screen with no hint.
+        self.assertIn(
+            "MANIFEST_PARSED,function(){v.play().catch(function(){});}",
+            html)
+        self.assertNotIn(
+            "MANIFEST_PARSED,function(){v.play().catch(function(){});"
+            "hideMsg();}", html)
+        # A fatal stream error shows a readable message and OK reloads
+        # for a fresh resolve instead of sitting on black.
+        self.assertIn("Hls.Events.ERROR", html)
+        self.assertIn("Stream failed to load. Press OK to try again.", html)
+        self.assertIn("window.location.reload()", html)
+
+
 if __name__ == "__main__":
     unittest.main()

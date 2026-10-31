@@ -938,6 +938,25 @@ def list_tiles(session: Session) -> list[dict]:
     return apps or []
 
 
+def applist_snapshot(session: Session) -> list[dict] | None:
+    """App list, or None when the TV did not answer at all.
+
+    Unlike list_tiles, a timeout is NOT an empty list: installing a tile
+    on the basis of a missing reply risks duplicating a tile the TV
+    already has but did not report in time. The auto-tile thread uses
+    this to tell "TV answered, tile genuinely absent" from "unknown".
+    """
+    def op(sess, topics):
+        sess.subscribe([topics["applist_reply"]])
+        time.sleep(0.3)
+        sess.publish(topics["ui"] + "actions/applist", "0")
+        raw = sess.wait_for("data/applist", 10)
+        return protocol.parse_applist_message(raw) if raw else None
+
+    apps, _ = run_with_session(op, session.host)
+    return apps
+
+
 def launch_tile(session: Session, app_id: str, name: str, url: str) -> None:
     def op(sess, topics):
         sess.publish(topics["ui"] + "actions/launchapp",
