@@ -226,6 +226,21 @@ PRESETS: dict[str, dict] = {
         "description": "Full catalog of movies, series and anime with auto-next streaming",
         "category": "Media",
     },
+    # Sidee's own remote-friendly TV menu. Its URL is NOT static: it is
+    # built from the running dashboard's LAN address and access key at
+    # install time (webui._install and the auto-tile thread), so the tile
+    # always opens the dashboard that is actually serving /tv/ right now.
+    # The tile icon stays empty because tile icons must be HTTPS and the
+    # dashboard serves plain HTTP on the LAN; the name shows instead.
+    "sidee_tv": {
+        "name": "Sidee TV",
+        "app_id": "sidee_tv",
+        "url": "",
+        "image": "",
+        "icon": "assets/sidee-logo.png",
+        "description": "Sidee's TV menu: browse AnimeX and play episodes with the TV remote",
+        "category": "Media",
+    },
 }
 
 

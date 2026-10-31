@@ -34,6 +34,11 @@ to a full Android build:
   address (shown in the dashboard's phone section). The dashboard
   URL handed to the WebView stays loopback. Access is still gated
   by the dashboard key, as on desktop.
+- Once a TV is paired, launching the app installs a **Sidee TV**
+  tile on that TV automatically (and refreshes it if its address
+  ever changes) — open the tile on the TV and the `/tv/` menu
+  comes up, no URL to type. The phone relays the stream while
+  you watch, so keep the app open.
 - Spike application ID: `io.github.johncarter2021.sidee` (fork
   owner). A release identifier is still an open decision.
 - Sideload only in v1 (no Play). Unsigned debug APK in CI.

@@ -18,6 +18,8 @@ Please read the scope notes below before installing: in v1 Sidee pairs with **on
 
 Sidee can also serve a remote-friendly front-end on the same dashboard server, for TVs whose remote only scrolls on desktop websites. Start Sidee as usual, then open `http://<this-computer's-LAN-IP>:8787/tv/?key=<key-from-your-dashboard-URL>` in the TV browser (or add that address as a custom tile). Arrows move a visible focus box, OK opens, Back returns.
 
+Zero-touch option: once a TV is paired, launching Sidee installs a **Sidee TV** tile on that TV automatically (and refreshes it if its address ever changes) — no URL to type, nothing to reinstall by hand. The tile just opens the `/tv/` menu. The dashboard address itself is now stable across restarts too: the access key and last-used port are saved in Sidee's state folder and reused, so an installed tile keeps working. The tile shows no icon (tile icons must be HTTPS; the dashboard serves plain HTTP on the LAN).
+
 What it does today: browse AnimeX (home, catalog, schedule, show pages) with links rewritten to stay inside `/tv/`, and play episodes in a native `<video>` player (OK play/pause, left/right seek 10s, up/down volume). Sidee resolves each episode's stream server-side and proxies playlists and segments, attaching the Referer the stream host requires. Scope: AnimeX only, subtitles, default provider; no search yet. Not in any release yet — run from source to try it.
 
 ## Requirements

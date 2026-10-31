@@ -450,11 +450,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # Invalid server addresses raise ValueError here, as before:
         # the HTTP handler turns that into an error response, and no
         # TV session is loaded or contacted for a bad address.
-        url = catalog.resolve_url(app, server or None)
+        session = None
+        if app["app_id"] == "sidee_tv":
+            # Sidee TV's URL is the live dashboard, not a preset string:
+            # the TV must reach this machine's LAN address with this
+            # run's access key, so it is built here, never resolved.
+            session = client.Session.load()
+            host_ip = _local_ip(session.host)
+            try:
+                address = ipaddress.ip_address(host_ip)
+            except ValueError:
+                address = None
+            if address is None or address.is_loopback \
+                    or address.is_unspecified:
+                return {"ok": False,
+                        "error": "Sidee TV needs this machine on the same "
+                                 "Wi-Fi as the TV; no LAN address was found."}
+            url = tv_frontend.absolute_tv_url(
+                host_ip, self.server.server_address[1], ACCESS_KEY)
+        else:
+            url = catalog.resolve_url(app, server or None)
         p = {"app_id": app["app_id"], "name": app["name"], "url": url,
              "image": app["image"]}
         _validate_preset(p)
-        s = client.Session.load()
+        s = session or client.Session.load()
         apps = client.add_tile(s, p["app_id"], p["name"], p["url"],
                                p["image"])
         _invalidate_catalog_cache()
@@ -541,6 +560,51 @@ def _remember_dashboard(port: int) -> None:
             os.remove(pending)
 
 
+def _identity_path() -> str:
+    return os.path.join(str(platform_support.profile_dir()),
+                        "dashboard_identity.json")
+
+
+def _load_identity() -> dict:
+    """Saved dashboard identity (access key + last port), or {}.
+
+    Kept apart from the runtime state file on purpose: _forget_dashboard
+    deletes the runtime file on a clean shutdown, but the identity must
+    survive restarts so an installed Sidee TV tile keeps working.
+    """
+    try:
+        with open(_identity_path(), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    key = data.get("key", "")
+    port = data.get("port", 0)
+    if (not isinstance(key, str)
+            or not re.fullmatch(r"[A-Za-z0-9_-]{16,}", key)
+            or type(port) is not int or not 0 < port < 65536):
+        return {}
+    return {"key": key, "port": port}
+
+
+def _save_identity(key: str, port: int) -> None:
+    path = _identity_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    pending = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
+                                         dir=os.path.dirname(path),
+                                         delete=False) as f:
+            pending = f.name
+            json.dump({"key": key, "port": port}, f)
+        os.chmod(pending, 0o600)
+        os.replace(pending, path)
+    finally:
+        if pending and os.path.isfile(pending):
+            os.remove(pending)
+
+
 def _forget_dashboard() -> None:
     try:
         path = _dashboard_state_path()
@@ -567,14 +631,30 @@ class DashboardServer(http.server.ThreadingHTTPServer):
         self.server_port = self.server_address[1]
 
 
-def _bind_dashboard_server(port: int | None = None, host: str = "0.0.0.0"):
-    port = _PORT if port is None else port
-    try:
-        return DashboardServer((host, port), Handler)
-    except OSError as e:
-        if not platform_support.address_in_use(e):
-            raise
-        return DashboardServer((host, 0), Handler)
+def _bind_dashboard_server(port: int | None = None, host: str = "0.0.0.0",
+                           saved_port: int | None = None):
+    if port is not None:
+        try:
+            return DashboardServer((host, port), Handler)
+        except OSError as e:
+            if not platform_support.address_in_use(e):
+                raise
+            return DashboardServer((host, 0), Handler)
+    # Default port: prefer the last-used port (keeps an installed Sidee
+    # TV tile's address stable), then the fixed default, then any free
+    # port. A busy candidate falls through to the next one.
+    candidates = []
+    if isinstance(saved_port, int) and 0 < saved_port < 65536:
+        candidates.append(saved_port)
+    if _PORT not in candidates:
+        candidates.append(_PORT)
+    for candidate in candidates:
+        try:
+            return DashboardServer((host, candidate), Handler)
+        except OSError as e:
+            if not platform_support.address_in_use(e):
+                raise
+    return DashboardServer((host, 0), Handler)
 
 
 class Dashboard:
@@ -586,7 +666,14 @@ class Dashboard:
         headless: bool = False,
         host: str = "0.0.0.0",
     ):
-        self.server = _bind_dashboard_server(port, host)
+        # Reuse the saved identity so an installed Sidee TV tile keeps
+        # working across restarts. The import-time ACCESS_KEY stays as
+        # the fallback for the very first run.
+        global ACCESS_KEY
+        saved = _load_identity()
+        if saved:
+            ACCESS_KEY = saved["key"]
+        self.server = _bind_dashboard_server(port, host, saved.get("port"))
         self.port = self.server.server_address[1]
         self.url = f"http://127.0.0.1:{self.port}/?key={ACCESS_KEY}"
         self.stop_event = threading.Event()
@@ -594,6 +681,7 @@ class Dashboard:
         self.server.headless = headless
         self.server.timeout = 0.2
         self.thread = None
+        self.tile_thread = None
         self.error = None
 
     def start(self) -> None:
@@ -606,6 +694,19 @@ class Dashboard:
             self.server.server_close()
             _forget_dashboard()
             raise
+        # Identity saving is best-effort: a read-only profile dir must
+        # never take down a dashboard that is already serving.
+        try:
+            _save_identity(ACCESS_KEY, self.port)
+        except OSError:
+            pass
+        try:
+            self.tile_thread = threading.Thread(
+                target=self._ensure_sidee_tv_tile, daemon=True,
+                name="sidee-tv-tile")
+            self.tile_thread.start()
+        except RuntimeError:
+            pass
 
     def _run(self) -> None:
         try:
@@ -618,6 +719,55 @@ class Dashboard:
 
     def open(self) -> bool:
         return webbrowser.open(self.url)
+
+    def _ensure_sidee_tv_tile(self) -> None:
+        """Keep a Sidee TV tile on the paired TV, with zero user steps.
+
+        Runs in the background for the dashboard's lifetime: every two
+        minutes (first check after 30 seconds, so startup stays fast) it
+        looks at the paired TV's tile list and installs the Sidee TV tile
+        when it is missing or points at an old address. Reinstalling under
+        the same tile id replaces the old tile instead of duplicating it.
+        No pairing yet, TV unreachable, or any MQTT error: skip quietly
+        and retry on the next cycle.
+        """
+        if self.stop_event.wait(30):
+            return
+        while not self.stop_event.is_set():
+            try:
+                self._ensure_sidee_tv_tile_once()
+            except Exception:
+                pass
+            if self.stop_event.wait(120):
+                return
+
+    def _ensure_sidee_tv_tile_once(self) -> None:
+        try:
+            session = client.Session.load()
+        except (client.AuthError, OSError):
+            return  # no pairing yet (or a corrupt one): nothing to do
+        try:
+            tiles = client.list_tiles(session)
+        except Exception:
+            return  # TV unreachable: retry on the next cycle
+        host_ip = _local_ip(session.host)
+        try:
+            address = ipaddress.ip_address(host_ip)
+        except ValueError:
+            return
+        if address.is_loopback or address.is_unspecified:
+            return  # no LAN route to the TV: a loopback tile is useless
+        url = tv_frontend.absolute_tv_url(host_ip, self.port, ACCESS_KEY)
+        if any(isinstance(t, dict) and
+               client.tile_matches_request(t, "sidee_tv", url)
+               for t in tiles):
+            return
+        try:
+            client.add_tile(session, "sidee_tv", "Sidee TV", url, "")
+        except Exception:
+            return
+        print("Sidee TV tile installed on your TV -- open it to browse "
+              "and play with the remote.", flush=True)
 
     def close(self) -> None:
         self.stop_event.set()

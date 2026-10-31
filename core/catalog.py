@@ -299,6 +299,12 @@ def resolve_url(app: dict, server: str | None) -> str:
         return presets.build_server_url(server)
     if app.get("server_builder") == "stremio":
         return presets.build_stremio_url(server or "")
+    if app.get("app_id") == "sidee_tv":
+        # Sidee TV's URL exists only while a dashboard is running (its LAN
+        # address and access key). The dashboard handler builds it; the
+        # CLI must never send an empty placeholder URL to the TV.
+        raise ValueError("Sidee TV can only be installed from a running "
+                         "dashboard, not from the command line.")
     return app.get("url", "")
 
 

@@ -45,7 +45,7 @@ class CatalogTest(unittest.TestCase):
                           "anikototv", "reanime", "animex", "anipm",
                           "nekowatch", "anidap", "anistream", "movy",
                           "cinejoy", "popcornmovies", "flystream",
-                          "rivestream", "sevenmovies"])
+                          "rivestream", "sevenmovies", "sidee_tv"])
         self.assertTrue(all(a["category"] == "Media" for a in apps))
         jellyfin = catalog.get_app("jellyfin")
         self.assertTrue(jellyfin["needs_server"])

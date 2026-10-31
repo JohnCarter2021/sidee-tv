@@ -198,6 +198,16 @@ def tv_url(path: str, params: dict, key: str) -> str:
     return path + "?" + urllib.parse.urlencode(q)
 
 
+def absolute_tv_url(host_ip: str, port: int, key: str) -> str:
+    """Full /tv/ menu URL a TV browser opens: LAN address + dashboard key.
+
+    This is the URL the Sidee TV tile installs (webui._install and the
+    auto-tile thread). It is built from the live dashboard, never stored
+    in the preset, because the address and key belong to this run.
+    """
+    return f"http://{host_ip}:{port}" + tv_url("/tv/", {}, key)
+
+
 def extract_slug(page_html: str) -> str | None:
     """AnimeX slug id, e.g. the-summer-hikaru-died-erx4l, from SSR data."""
     m = re.search(r'slug:"([^"]+)"', page_html)
