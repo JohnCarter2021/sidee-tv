@@ -57,7 +57,11 @@ class IdentityTest(unittest.TestCase):
         self.assertEqual(webui._load_identity(),
                          {"key": "aB3_dEf6hIj9kLm0nOpQr", "port": 8787})
         path = Path(webui._identity_path())
-        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        # Windows chmod cannot enforce owner-only permissions (it reports
+        # 0o666), so the mode check is Unix-only, matching the custom-apps
+        # test's certificate-file check.
+        if os.name != "nt":
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
         path.write_text("not json{")
         self.assertEqual(webui._load_identity(), {})
         path.write_text(json.dumps({"key": "short", "port": 8787}))
