@@ -1,0 +1,341 @@
+name: Build Sidee
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows tests and ZIP
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.13.16'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Install the Windows connection library
+        run: python -m pip install paho-mqtt==2.1.0
+      - name: Check imports, resources and Python syntax
+        run: |
+          python -m compileall -q sidee.py macos_launcher.py core tools tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python sidee.py --self-test
+      - name: Run all source tests
+        run: |
+          python -u -X faulthandler -c "import faulthandler, unittest; faulthandler.dump_traceback_later(90, exit=True); result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover('tests')); faulthandler.cancel_dump_traceback_later(); raise SystemExit(not result.wasSuccessful())"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test tests/test_dashboard_selection.js
+      - name: Start and stop the source dashboard
+        run: python tools/smoke_test.py --source
+      - name: Build the existing Windows download
+        run: python tools/build_windows_release.py
+      - name: Test first-time setup from the actual Windows ZIP
+        shell: powershell
+        run: |
+          $sideeTestRoot = Join-Path $env:RUNNER_TEMP 'Sidee fresh download'
+          Expand-Archive -LiteralPath 'dist/sidee-windows.zip' -DestinationPath $sideeTestRoot
+          $sideeDownloadRoot = Join-Path $sideeTestRoot 'Sidee'
+          & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $sideeDownloadRoot 'start-windows.ps1') -PrepareOnly
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $sideeEmbeddedPython = Join-Path $sideeDownloadRoot '.runtime/python-3.13.16-amd64/python.exe'
+          python tools/smoke_test.py --source --python $sideeEmbeddedPython --source-root $sideeDownloadRoot
+          exit $LASTEXITCODE
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: Sidee-Windows
+          path: dist/sidee-windows.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  windows-exe:
+    name: Windows portable exe
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.13.16'
+      - name: Install build dependencies
+        run: python -m pip install paho-mqtt==2.1.0 "pyinstaller>=6.10,<7"
+      - name: Check imports, resources and Python syntax
+        run: |
+          python -m compileall -q windows_launcher.py packaging/windows.spec tools/build_windows_exe.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python sidee.py --self-test
+      - name: Build the portable exe ZIP
+        shell: powershell
+        env:
+          SIDEE_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          $version = '0.1.4.2'
+          if ($env:GITHUB_REF_NAME -match '^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$') { $version = $env:GITHUB_REF_NAME.Substring(1) }
+          elseif ($env:SIDEE_COMMIT_MESSAGE -match '^release: v([0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?)$') { $version = $Matches[1] }
+          python tools/build_windows_exe.py --version $version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Check the bundled executable without GUI or a TV
+        run: python tools/smoke_test.py --executable dist/Sidee/Sidee.exe
+      - name: Check the failure path stays visible and logs
+        shell: powershell
+        run: |
+          $env:SIDEE_CI = '1'
+          Remove-Item 'dist/Sidee/Sidee.log' -ErrorAction SilentlyContinue
+          & dist/Sidee/Sidee.exe --port 99999
+          $code = $LASTEXITCODE
+          Write-Host "exe exit code: $code"
+          Write-Host "Sidee.log exists: $(Test-Path 'dist/Sidee/Sidee.log')"
+          if ($code -eq 0) { exit 1 }
+          if (-not (Test-Path 'dist/Sidee/Sidee.log')) { exit 1 }
+          exit 0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: Sidee-Windows-Exe
+          path: dist/Sidee-Windows-Exe.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  macos:
+    name: macOS ${{ matrix.architecture }} app and DMG
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            architecture: arm64
+            python-architecture: arm64
+          - runner: macos-15-intel
+            architecture: x64
+            python-architecture: x64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.13.16'
+          architecture: ${{ matrix.python-architecture }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Install pinned macOS build dependencies
+        run: python -m pip install -r requirements-build-macos.txt
+      - name: Check imports, resources and Python syntax
+        run: |
+          python -m compileall -q sidee.py macos_launcher.py core tools tests
+          python sidee.py --self-test
+      - name: Run all source tests
+        run: |
+          python -u -X faulthandler -c "import faulthandler, unittest; faulthandler.dump_traceback_later(90, exit=True); result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover('tests')); faulthandler.cancel_dump_traceback_later(); raise SystemExit(not result.wasSuccessful())"
+          node --test tests/test_dashboard_selection.js
+      - name: Start and stop the source dashboard
+        run: python tools/smoke_test.py --source
+      - name: Build and verify the app, native architecture, ZIP and DMG
+        env:
+          SIDEE_REF_NAME: ${{ github.ref_name }}
+          SIDEE_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          SIDEE_BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          version=0.1.4.2
+          if [[ "$SIDEE_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            version="${SIDEE_REF_NAME#v}"
+          elif [[ "$SIDEE_COMMIT_MESSAGE" =~ ^release:\ v([0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?)$ ]]; then
+            version="${BASH_REMATCH[1]}"
+          fi
+          python tools/build_macos_release.py --architecture '${{ matrix.architecture }}' --version "$version"
+      - name: Check the bundled runtime without GUI or a TV
+        run: dist/Sidee.app/Contents/MacOS/Sidee --self-test
+      - name: Start and stop the actual bundled executable
+        run: python tools/smoke_test.py --executable dist/Sidee.app/Contents/MacOS/Sidee
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: Sidee-macOS-${{ matrix.architecture }}
+          path: |
+            dist/Sidee-macOS-${{ matrix.architecture }}.app.zip
+            dist/Sidee-macOS-${{ matrix.architecture }}.dmg
+          if-no-files-found: error
+          retention-days: 30
+
+  linux:
+    name: Linux AppImage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.13.16'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Install build dependencies
+        run: python -m pip install paho-mqtt==2.1.0 "pyinstaller>=6.10,<7"
+      - name: Check imports, resources and Python syntax
+        run: |
+          python -m compileall -q sidee.py core tools tests
+          python sidee.py --self-test
+      - name: Run all source tests
+        run: |
+          python -u -X faulthandler -c "import faulthandler, unittest; faulthandler.dump_traceback_later(90, exit=True); result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover('tests')); faulthandler.cancel_dump_traceback_later(); raise SystemExit(not result.wasSuccessful())"
+          node --test tests/test_dashboard_selection.js
+      - name: Start and stop the source dashboard
+        run: python tools/smoke_test.py --source
+      - name: Download appimagetool
+        run: |
+          curl -L -o appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+      - name: Build the AppImage
+        env:
+          SIDEE_REF_NAME: ${{ github.ref_name }}
+          SIDEE_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          version=0.1.4.2
+          if [[ "$SIDEE_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            version="${SIDEE_REF_NAME#v}"
+          elif [[ "$SIDEE_COMMIT_MESSAGE" =~ ^release:\ v([0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?)$ ]]; then
+            version="${BASH_REMATCH[1]}"
+          fi
+          python tools/build_linux_appimage.py --appimagetool ./appimagetool --version "$version"
+      - name: Check the AppImage without GUI or a TV
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: python tools/smoke_test.py --executable dist/Sidee-Linux-x86_64.AppImage
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: Sidee-Linux-x86_64
+          path: dist/Sidee-Linux-x86_64.AppImage
+          if-no-files-found: error
+          retention-days: 30
+
+  android:
+    name: Android spike APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.11'
+      - name: Install Android 34 platform and build-tools
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0"
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.9'
+      - name: Build the spike APK
+        run: |
+          cd android
+          gradle :app:assembleDebug --console=plain
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: Sidee-Android
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Enable KVM for the emulator
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm 2>/dev/null || true; ls -l /dev/kvm; else echo "no /dev/kvm on this runner"; fi
+      - name: Emulator smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        timeout-minutes: 12
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb install android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -n io.github.johncarter2021.sidee/.MainActivity
+                        for i in $(seq 1 24); do adb logcat -d > logcat.txt; if grep -q "Sidee dashboard started" logcat.txt; then echo "dashboard marker found"; break; fi; sleep 5; done
+                        adb logcat -d > logcat.txt
+                        adb shell pidof io.github.johncarter2021.sidee || echo "app process not running"
+            if grep -q "FATAL EXCEPTION" logcat.txt; then echo "app crashed:"; grep -A 20 "FATAL EXCEPTION" logcat.txt | head -60; exit 1; fi
+            grep -q "Sidee dashboard started" logcat.txt || (echo "marker missing; Sidee/Python/crash lines:"; grep -E "Sidee|Python|chaquo|AndroidRuntime" logcat.txt | head -80; exit 1)
+
+  release:
+    name: Prepare verified release assets
+    if: "${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || startsWith(github.event.head_commit.message, 'release: v')) }}"
+    needs: [windows, windows-exe, macos, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: Sidee-*
+          path: release-assets
+          merge-multiple: true
+      - name: Create or update the draft with verified builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIDEE_REPOSITORY: ${{ github.repository }}
+          SIDEE_REF: ${{ github.ref }}
+          SIDEE_REF_NAME: ${{ github.ref_name }}
+          SIDEE_SHA: ${{ github.sha }}
+          SIDEE_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          publish=false
+          if [[ "$SIDEE_REF" == refs/tags/v* ]]; then
+            SIDEE_TAG="$SIDEE_REF_NAME"
+          else
+            first_line="$(printf '%s\n' "$SIDEE_COMMIT_MESSAGE" | head -n 1)"
+            SIDEE_TAG="${first_line#release: }"
+            publish=true
+          fi
+          if ! [[ "$SIDEE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo 'Release versions must use vX.Y.Z or vX.Y.Z.N.' >&2
+            exit 1
+          fi
+          notes_options=(--generate-notes)
+          notes_file="docs/releases/${SIDEE_TAG#v}.md"
+          if [[ -f "$notes_file" ]]; then
+            notes_options=(--notes-file "$notes_file")
+          fi
+          if ! gh release view "$SIDEE_TAG" --repo "$SIDEE_REPOSITORY" >/dev/null 2>&1; then
+            if [[ "$publish" == true ]]; then
+              gh release create "$SIDEE_TAG" --repo "$SIDEE_REPOSITORY" --target "$SIDEE_SHA" --draft --title "Sidee $SIDEE_TAG (Beta)" "${notes_options[@]}"
+            else
+              gh release create "$SIDEE_TAG" --repo "$SIDEE_REPOSITORY" --verify-tag --draft --title "Sidee $SIDEE_TAG" "${notes_options[@]}"
+            fi
+          fi
+          if [[ "$(gh release view "$SIDEE_TAG" --repo "$SIDEE_REPOSITORY" --json isDraft --jq .isDraft)" != 'true' ]]; then
+            echo 'The release is already published; its assets will not be overwritten.' >&2
+            exit 1
+          fi
+          (cd release-assets && sha256sum -- * > SHA256SUMS.txt)
+          gh release upload "$SIDEE_TAG" release-assets/* --repo "$SIDEE_REPOSITORY" --clobber
+          if [[ "$publish" == true ]]; then
+            gh release edit "$SIDEE_TAG" --repo "$SIDEE_REPOSITORY" --draft=false --prerelease
+          fi
